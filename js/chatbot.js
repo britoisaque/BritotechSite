@@ -4,7 +4,7 @@
 // interferir com o app padrão usado no login/Firestore (js/app-store.js, js/firebase-config.js).
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-app.js";
-import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-app-check.js";
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-app-check.js";
 import { getAI, getGenerativeModel, GoogleAIBackend } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-ai.js";
 
 const SYSTEM_INSTRUCTION = `Você é a assistente virtual da BritoTec, uma loja e assistência técnica de eletrônicos em São João de Meriti (RJ), com atendimento pelo site e loja online de acessórios.
@@ -45,10 +45,10 @@ async function initFirebaseAI() {
   }
   try {
     initializeAppCheck(chatbotApp, {
-      // Depois de configurar o App Check com reCAPTCHA v3 no Firebase Console
-      // (Build > App Check > Apps > seu app web > "reCAPTCHA v3"), troque a chave abaixo
-      // pela "site key" gerada lá.
-      provider: new ReCaptchaV3Provider("SUBSTITUA_PELA_CHAVE_RECAPTCHA_V3"),
+      // Depois de criar uma chave "Website" no Google Cloud Console > reCAPTCHA Enterprise
+      // (e registrar o app no Firebase Console > Build > App Check > Apps > "reCAPTCHA Enterprise"),
+      // troque a chave abaixo pela "Site Key" gerada lá.
+      provider: new ReCaptchaEnterpriseProvider("SUBSTITUA_PELA_CHAVE_RECAPTCHA_ENTERPRISE"),
       isTokenAutoRefreshEnabled: true
     });
   } catch (error) {
