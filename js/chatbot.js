@@ -3,9 +3,9 @@
 // Ele cria seu próprio app Firebase secundário, chamado "chatbot", para não
 // interferir com o app padrão usado no login/Firestore (js/app-store.js, js/firebase-config.js).
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-app.js";
-import { initializeAppCheck, ReCaptchaEnterpriseProvider } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-app-check.js";
-import { getAI, getGenerativeModel, GoogleAIBackend, Schema } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-ai.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app-check.js";
+import { getAI, getGenerativeModel, GoogleAIBackend, Schema } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-ai.js";
 
 const DAY_NAMES = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
 
@@ -139,7 +139,7 @@ async function initFirebaseAI() {
   }
 
   const ai = getAI(chatbotApp, { backend: new GoogleAIBackend() });
-  return getGenerativeModel(ai, { model: "gemini-3.6-flash", systemInstruction: SYSTEM_INSTRUCTION, tools: [TOOLS] });
+  return getGenerativeModel(ai, { model: "gemini-3.5-flash", systemInstruction: SYSTEM_INSTRUCTION, tools: [TOOLS] });
 }
 
 function buildWidget() {
@@ -241,7 +241,7 @@ async function main() {
         const responses = await Promise.all(calls.map(async call => ({
           functionResponse: { name: call.name, response: await callTool(call.name, call.args) }
         })));
-        result = await withTimeout(chat.sendMessage(responses));
+        result = await withTimeout(chat.sendMessage([{ role: "user", parts: responses }]));
         calls = result.response.functionCalls();
       }
 
