@@ -48,7 +48,7 @@ async function initFirebaseAI() {
       // Depois de criar uma chave "Website" no Google Cloud Console > reCAPTCHA Enterprise
       // (e registrar o app no Firebase Console > Build > App Check > Apps > "reCAPTCHA Enterprise"),
       // troque a chave abaixo pela "Site Key" gerada lá.
-    provider: new ReCaptchaEnterpriseProvider("6Lcw6JctAAAAAJVFCkUMWrBxYjrB4AW8YQmtAoNB"),
+      provider: new ReCaptchaEnterpriseProvider("6Lcw6JctAAAAAJVFCkUMWrBxYjrB4AW8YQmtAoNB"),
       isTokenAutoRefreshEnabled: true
     });
   } catch (error) {
@@ -56,7 +56,7 @@ async function initFirebaseAI() {
   }
 
   const ai = getAI(chatbotApp, { backend: new GoogleAIBackend() });
-  return getGenerativeModel(ai, { model: "gemini-3.7-flash", systemInstruction: SYSTEM_INSTRUCTION });
+  return getGenerativeModel(ai, { model: "gemini-2.5-flash", systemInstruction: SYSTEM_INSTRUCTION });
 }
 
 function buildWidget() {
@@ -148,13 +148,17 @@ async function main() {
 
     try {
       if (!chat) chat = model.startChat({ history: [] });
-      const result = await chat.sendMessage(text);
+      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 25000));
+      const result = await Promise.race([chat.sendMessage(text), timeout]);
       typing.remove();
       addMessage(messages, result.response.text(), "bot");
     } catch (error) {
       console.error("Chatbot BritoTec: erro ao chamar o Gemini.", error);
       typing.remove();
-      addMessage(messages, "Não consegui responder agora. Tente novamente em instantes ou fale com a gente pelo WhatsApp.", "bot");
+      const msg = error?.message === "timeout"
+        ? "Estou demorando mais que o normal pra responder. Tente novamente em instantes ou fale com a gente pelo WhatsApp."
+        : "Não consegui responder agora. Tente novamente em instantes ou fale com a gente pelo WhatsApp.";
+      addMessage(messages, msg, "bot");
     } finally {
       sending = false;
       form.querySelector("button[type=submit]").disabled = false;
