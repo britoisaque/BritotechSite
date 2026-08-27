@@ -231,7 +231,7 @@ async function main() {
 
     try {
       if (!chat) chat = model.startChat({ history: [] });
-      const withTimeout = promise => Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 25000))]);
+      const withTimeout = promise => Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 45000))]);
 
       let result = await withTimeout(chat.sendMessage(text));
       let calls = result.response.functionCalls();
