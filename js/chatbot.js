@@ -48,7 +48,7 @@ async function initFirebaseAI() {
       // Depois de criar uma chave "Website" no Google Cloud Console > reCAPTCHA Enterprise
       // (e registrar o app no Firebase Console > Build > App Check > Apps > "reCAPTCHA Enterprise"),
       // troque a chave abaixo pela "Site Key" gerada lá.
-      provider: new ReCaptchaEnterpriseProvider("SUBSTITUA_PELA_CHAVE_RECAPTCHA_ENTERPRISE"),
+    provider: new ReCaptchaEnterpriseProvider("6Lcw6JctAAAAAJVFCkUMWrBxYjrB4AW8YQmtAoNB"),
       isTokenAutoRefreshEnabled: true
     });
   } catch (error) {
