@@ -139,7 +139,7 @@ async function initFirebaseAI() {
   }
 
   const ai = getAI(chatbotApp, { backend: new GoogleAIBackend() });
-  return getGenerativeModel(ai, { model: "gemini-3.6-flash", systemInstruction: SYSTEM_INSTRUCTION, tools: TOOLS });
+  return getGenerativeModel(ai, { model: "gemini-3.6-flash", systemInstruction: SYSTEM_INSTRUCTION, tools: [TOOLS] });
 }
 
 function buildWidget() {
