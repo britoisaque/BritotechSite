@@ -167,10 +167,25 @@ function buildWidget() {
   return { launcher, panel };
 }
 
+function escapeHtml(str) {
+  return String(str ?? "").replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+}
+
+// Converte um subconjunto simples de Markdown (negrito, itálico, listas com "*") em HTML seguro.
+// Sempre escapa o texto primeiro, então só depois aplica as tags — nunca insere HTML vindo do modelo diretamente.
+function formatBotMessage(text) {
+  let safe = escapeHtml(text);
+  safe = safe.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  safe = safe.replace(/(^|\n)\* /g, "$1• ");
+  safe = safe.replace(/\n/g, "<br>");
+  return safe;
+}
+
 function addMessage(container, text, who) {
   const bubble = document.createElement("div");
   bubble.className = `britotec-chat-msg ${who}`;
-  bubble.textContent = text;
+  if (who === "bot") bubble.innerHTML = formatBotMessage(text);
+  else bubble.textContent = text;
   container.appendChild(bubble);
   container.scrollTop = container.scrollHeight;
   return bubble;
