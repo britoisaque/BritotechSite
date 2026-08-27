@@ -5,7 +5,84 @@
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-app.js";
 import { initializeAppCheck, ReCaptchaEnterpriseProvider } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-app-check.js";
-import { getAI, getGenerativeModel, GoogleAIBackend } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-ai.js";
+import { getAI, getGenerativeModel, GoogleAIBackend, Schema } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-ai.js";
+
+const DAY_NAMES = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
+
+// ---- Ferramentas: funções reais que consultam window.BritoTec (js/app-store.js) ----
+
+function toolGetStoreSchedule() {
+  const store = window.BritoTec;
+  if (!store) return { error: "Dados da loja indisponíveis nesta página." };
+  const status = store.storeStatus();
+  const schedule = store.getSchedule();
+  const weekly_schedule = DAY_NAMES.map((name, day) => {
+    const config = schedule[day];
+    return config?.enabled ? `${name}: ${config.open} às ${config.close}` : `${name}: fechado`;
+  });
+  return { open_now: status.open, status_label: status.label, weekly_schedule };
+}
+
+function toolSearchProducts({ name, category } = {}) {
+  const store = window.BritoTec;
+  if (!store) return { error: "Catálogo indisponível nesta página." };
+  let products = store.getProducts();
+  if (category) products = products.filter(p => p.category.toLowerCase() === String(category).toLowerCase());
+  if (name) { const term = String(name).toLowerCase(); products = products.filter(p => p.name.toLowerCase().includes(term)); }
+  return {
+    results: products.map(p => ({ name: p.name, category: p.category, price_brl: p.price, in_stock: p.stock > 0, stock_quantity: p.stock }))
+  };
+}
+
+function toolGoToPage({ page }) {
+  const routes = { inicio: "index.html", celulares: "celulares.html", computadores: "computadores.html", videogames: "videogames.html", acessorios: "acessorios.html" };
+  const url = routes[page];
+  if (!url) return { navigated: false, error: "Página desconhecida." };
+  // pequeno atraso para a resposta em texto do assistente aparecer antes do redirecionamento
+  setTimeout(() => { window.location.href = url; }, 1200);
+  return { navigated: true, page };
+}
+
+async function callTool(name, args) {
+  try {
+    if (name === "getStoreSchedule") return toolGetStoreSchedule();
+    if (name === "searchProducts") return toolSearchProducts(args);
+    if (name === "goToPage") return toolGoToPage(args);
+    return { error: `Função desconhecida: ${name}` };
+  } catch (error) {
+    return { error: String(error?.message || error) };
+  }
+}
+
+const TOOLS = {
+  functionDeclarations: [
+    {
+      name: "getStoreSchedule",
+      description: "Retorna se a loja BritoTec está aberta agora e o horário de funcionamento de cada dia da semana. Use sempre que o cliente perguntar sobre horário, se a loja está aberta, ou a que horas abre/fecha.",
+      parameters: Schema.object({ properties: {} })
+    },
+    {
+      name: "searchProducts",
+      description: "Busca produtos no catálogo de acessórios da BritoTec (capinhas, carregadores, fones, suportes, cabos, docks magnéticos), retornando preço em reais e se há estoque disponível. Use sempre que o cliente perguntar o preço de um acessório, se tem em estoque, ou pedir recomendações.",
+      parameters: Schema.object({
+        properties: {
+          name: Schema.string({ description: "Parte do nome do produto para buscar, ex: 'carregador', 'fone'. Deixe vazio para listar o catálogo inteiro." }),
+          category: Schema.string({ description: "Filtra por categoria: proteção, energia, áudio ou setup." })
+        },
+        optionalProperties: ["name", "category"]
+      })
+    },
+    {
+      name: "goToPage",
+      description: "Leva o cliente automaticamente para a página correta do site. Use quando o cliente quiser abrir uma solicitação de reparo (celulares, computadores ou videogames) ou ver a loja de acessórios.",
+      parameters: Schema.object({
+        properties: {
+          page: Schema.string({ description: "Uma destas opções exatas: 'celulares', 'computadores', 'videogames', 'acessorios', 'inicio'." })
+        }
+      })
+    }
+  ]
+};
 
 const SYSTEM_INSTRUCTION = `Você é a assistente virtual da BritoTec, uma loja e assistência técnica de eletrônicos em São João de Meriti (RJ), com atendimento pelo site e loja online de acessórios.
 
@@ -13,15 +90,21 @@ Sobre a BritoTec:
 - Presta manutenção de Celulares, Computadores/Notebooks e Videogames (consoles).
 - Vende acessórios: capinhas, carregadores, fones, suportes, cabos e docks magnéticos.
 - Para pedir um reparo, o cliente preenche um formulário na página do aparelho (Celulares, Computadores ou Videogames) com marca, modelo, defeito, foto opcional, nome, WhatsApp, e-mail e CPF.
-- O horário de funcionamento é configurado pela loja e pode mudar; se perguntarem o horário exato de hoje, oriente a pessoa a olhar o indicador "loja aberta/fechada" no topo do site, pois você não tem acesso a ele em tempo real.
-- Você NÃO tem acesso a preços exatos de reparo (dependem de avaliação técnica), nem ao estoque exato dos acessórios, nem a dados de pedidos de clientes específicos.
+
+Ferramentas disponíveis (USE SEMPRE que fizer sentido, em vez de dizer que não sabe):
+- getStoreSchedule: retorna se a loja está aberta agora e o horário de cada dia da semana. Use sempre que perguntarem sobre horário de funcionamento.
+- searchProducts: busca no catálogo real de acessórios, com preço em reais e se há estoque. Use sempre que perguntarem preço, disponibilidade ou pedirem recomendação de acessórios.
+- goToPage: leva o cliente direto pra página certa do site (celulares, computadores, videogames, acessorios, inicio). Use sempre que o cliente indicar que quer pedir um reparo ou ver a loja.
+
+Regras importantes:
+- Você NÃO tem acesso a preços exatos de reparo (dependem de avaliação técnica) nem a dados de pedidos específicos de clientes. Para isso, oriente a abrir uma ordem de serviço ou falar com a equipe.
+- Nunca invente preços de acessórios, estoque ou horários — sempre confira com as ferramentas antes de responder algo que elas poderiam te dizer.
 
 Como se comportar:
 - Fale português do Brasil, em tom caloroso, direto e prestativo — como um atendente humano bem treinado, não robótico.
 - Responda SOMENTE sobre assuntos da BritoTec: reparos, acessórios, como pedir um serviço, dúvidas gerais sobre os produtos e o funcionamento do site.
 - Se perguntarem algo fora desse escopo (temas gerais, outras empresas, assuntos pessoais, etc.), recuse educadamente e traga a conversa de volta para como você pode ajudar com a BritoTec.
-- Nunca invente preços, prazos exatos ou disponibilidade de estoque. Quando não souber um dado exato, oriente a pessoa a abrir uma ordem de serviço no site ou falar direto com a equipe.
-- Nunca peça ou processe dados sensíveis (senha, CPF completo, cartão de crédito) dentro do chat; se o cliente já tem um problema específico, direcione para o formulário de solicitação da página correspondente.
+- Nunca peça ou processe dados sensíveis (senha, CPF completo, cartão de crédito) dentro do chat.
 - Mantenha as respostas curtas (poucas frases), a não ser que o cliente peça mais detalhes.`;
 
 function isLocalHost() {
@@ -56,7 +139,7 @@ async function initFirebaseAI() {
   }
 
   const ai = getAI(chatbotApp, { backend: new GoogleAIBackend() });
-  return getGenerativeModel(ai, { model: "gemini-3.6-flash", systemInstruction: SYSTEM_INSTRUCTION });
+  return getGenerativeModel(ai, { model: "gemini-3.6-flash", systemInstruction: SYSTEM_INSTRUCTION, tools: TOOLS });
 }
 
 function buildWidget() {
@@ -119,7 +202,7 @@ async function main() {
     panel.classList.toggle("open", opened);
     if (opened) {
       if (!messages.children.length) {
-        addMessage(messages, "Oi! 👋 Sou a assistente virtual da BritoTec. Posso te ajudar com dúvidas sobre reparos de celular, computador ou videogame, e sobre nossos acessórios. Como posso ajudar?", "bot");
+        addMessage(messages, "Oi! 👋 Sou a assistente virtual da BritoTec. Posso te contar sobre nosso horário, ver preço e estoque dos acessórios, e te levar direto pra página certa pra pedir um reparo. Como posso ajudar?", "bot");
       }
       input.focus();
     }
@@ -148,8 +231,20 @@ async function main() {
 
     try {
       if (!chat) chat = model.startChat({ history: [] });
-      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 25000));
-      const result = await Promise.race([chat.sendMessage(text), timeout]);
+      const withTimeout = promise => Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 25000))]);
+
+      let result = await withTimeout(chat.sendMessage(text));
+      let calls = result.response.functionCalls();
+      let rounds = 0;
+      while (calls && calls.length && rounds < 5) {
+        rounds++;
+        const responses = await Promise.all(calls.map(async call => ({
+          functionResponse: { name: call.name, response: await callTool(call.name, call.args) }
+        })));
+        result = await withTimeout(chat.sendMessage(responses));
+        calls = result.response.functionCalls();
+      }
+
       typing.remove();
       addMessage(messages, result.response.text(), "bot");
     } catch (error) {
