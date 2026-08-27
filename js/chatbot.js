@@ -241,7 +241,7 @@ async function main() {
         const responses = await Promise.all(calls.map(async call => ({
           functionResponse: { name: call.name, response: await callTool(call.name, call.args) }
         })));
-        result = await withTimeout(chat.sendMessage([{ role: "user", parts: responses }]));
+        result = await withTimeout(chat.sendMessage(responses));
         calls = result.response.functionCalls();
       }
 
