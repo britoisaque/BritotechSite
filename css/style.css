@@ -54,5 +54,8 @@
 .britotec-chat-form input:focus{border-color:#47b7ff}
 .britotec-chat-form button{width:38px;height:38px;border-radius:50%;border:0;background:#2697ff;color:#fff;display:grid;place-items:center;cursor:pointer;flex-shrink:0}
 .britotec-chat-form button:disabled{opacity:.5;cursor:default}
+.britotec-chat-quickreplies{display:flex;flex-wrap:wrap;gap:6px;padding:0 16px 12px;align-self:flex-start}
+.britotec-chat-chip{background:#0d2440;border:1px solid rgba(104,188,251,.35);color:#bfe3ff;border-radius:16px;padding:6px 12px;font-size:11.5px;cursor:pointer;transition:.15s}
+.britotec-chat-chip:hover{background:#123058;border-color:#47b7ff}
 .britotec-chat-form button svg{width:16px;height:16px}
 @media (max-width:480px){.britotec-chat-panel{right:16px;bottom:84px}.britotec-chat-launcher{right:16px;bottom:16px}}
