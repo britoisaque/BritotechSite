@@ -142,6 +142,31 @@ async function initFirebaseAI() {
   return getGenerativeModel(ai, { model: "gemini-3.5-flash", systemInstruction: SYSTEM_INSTRUCTION, tools: [TOOLS] });
 }
 
+// ---- Persistência da conversa (sobrevive à navegação entre páginas, na mesma aba) ----
+const STORAGE_KEY = "britotec-chat-v1";
+const DAILY_LIMIT_KEY = "britotec-chat-daily-v1";
+const SESSION_LIMIT = 30;   // mensagens do usuário por aba/sessão
+const DAILY_LIMIT = 60;     // mensagens do usuário por dia, neste navegador
+const MIN_INTERVAL_MS = 1500; // intervalo mínimo entre envios, evita clique duplo/spam
+
+function loadChatState() {
+  try { return JSON.parse(sessionStorage.getItem(STORAGE_KEY)) || null; } catch { return null; }
+}
+function saveChatState(state) {
+  try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch { /* armazenamento indisponível, seguimos sem persistir */ }
+}
+function readDailyUsage() {
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    const data = JSON.parse(localStorage.getItem(DAILY_LIMIT_KEY));
+    if (data?.date === today) return data;
+  } catch { /* ignora e recomeça a contagem */ }
+  return { date: today, count: 0 };
+}
+function writeDailyUsage(data) {
+  try { localStorage.setItem(DAILY_LIMIT_KEY, JSON.stringify(data)); } catch { /* armazenamento indisponível */ }
+}
+
 function buildWidget() {
   const launcher = document.createElement("button");
   launcher.className = "britotec-chat-launcher";
@@ -200,6 +225,28 @@ function addTypingIndicator(container) {
   return bubble;
 }
 
+const QUICK_REPLIES = [
+  { label: "Ver horário", text: "Vocês estão abertos agora? Qual o horário de funcionamento?" },
+  { label: "Pedir reparo", text: "Quero pedir um reparo" },
+  { label: "Ver acessórios", text: "Quero ver os acessórios disponíveis" }
+];
+
+function addQuickReplies(container, onPick) {
+  const wrap = document.createElement("div");
+  wrap.className = "britotec-chat-quickreplies";
+  QUICK_REPLIES.forEach(reply => {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "britotec-chat-chip";
+    chip.textContent = reply.label;
+    chip.addEventListener("click", () => { wrap.remove(); onPick(reply.text); });
+    wrap.appendChild(chip);
+  });
+  container.appendChild(wrap);
+  container.scrollTop = container.scrollHeight;
+  return wrap;
+}
+
 async function main() {
   const model = await initFirebaseAI();
   const { launcher, panel } = buildWidget();
@@ -207,10 +254,32 @@ async function main() {
   const form = panel.querySelector("[data-chat-form]");
   const input = panel.querySelector("[data-chat-input]");
   const closeButton = panel.querySelector(".britotec-chat-close");
+  const submitButton = form.querySelector("button[type=submit]");
 
+  const saved = loadChatState();
+  const uiLog = [];
   let chat = null;
   let opened = false;
   let sending = false;
+  let lastSendAt = 0;
+  let sessionCount = saved?.sessionCount || 0;
+
+  function persist(historySnapshot) {
+    saveChatState({ open: opened, messages: uiLog, sessionCount, history: historySnapshot !== undefined ? historySnapshot : (saved?.history || null) });
+  }
+
+  function logMessage(text, who) {
+    uiLog.push({ text, who });
+    persist();
+  }
+
+  // Restaura a conversa anterior (se o cliente veio de outra página do site, por exemplo)
+  if (saved?.messages?.length) {
+    saved.messages.forEach(m => { addMessage(messages, m.text, m.who); uiLog.push(m); });
+  }
+  if (model && saved?.history?.length) {
+    try { chat = model.startChat({ history: saved.history }); } catch { chat = null; }
+  }
 
   function toggle(open) {
     opened = open ?? !panel.classList.contains("open");
@@ -218,30 +287,52 @@ async function main() {
     if (opened) {
       if (!messages.children.length) {
         addMessage(messages, "Oi! 👋 Sou a assistente virtual da BritoTec. Posso te contar sobre nosso horário, ver preço e estoque dos acessórios, e te levar direto pra página certa pra pedir um reparo. Como posso ajudar?", "bot");
+        addQuickReplies(messages, text => { input.value = ""; sendUserMessage(text); });
       }
       input.focus();
     }
+    persist();
   }
+
+  if (saved?.open) toggle(true);
 
   launcher.addEventListener("click", () => toggle());
   closeButton.addEventListener("click", () => toggle(false));
 
-  form.addEventListener("submit", async event => {
-    event.preventDefault();
-    const text = input.value.trim();
-    if (!text || sending) return;
+  async function sendUserMessage(text) {
+    if (sending) return;
+    const now = Date.now();
+    if (now - lastSendAt < MIN_INTERVAL_MS) return; // ignora cliques/envios repetidos muito rápidos
+    lastSendAt = now;
 
     if (!model) {
-      addMessage(messages, text, "user");
-      addMessage(messages, "O assistente de IA ainda não está configurado neste site. Fale com a equipe pelo WhatsApp ou formulário de contato.", "bot");
-      input.value = "";
+      addMessage(messages, text, "user"); logMessage(text, "user");
+      const msg = "O assistente de IA ainda não está configurado neste site. Fale com a equipe pelo WhatsApp.";
+      addMessage(messages, msg, "bot"); logMessage(msg, "bot");
+      return;
+    }
+
+    // Limite diário (por navegador) — protege a cota gratuita do Gemini contra uso abusivo.
+    const daily = readDailyUsage();
+    if (daily.count >= DAILY_LIMIT) {
+      addMessage(messages, text, "user"); logMessage(text, "user");
+      const msg = "Por hoje já respondi bastante por aqui! Fala com a gente direto pelo WhatsApp que a equipe te ajuda rapidinho.";
+      addMessage(messages, msg, "bot"); logMessage(msg, "bot");
+      return;
+    }
+    // Limite por sessão/aba — evita conversas infinitas na mesma janela.
+    if (sessionCount >= SESSION_LIMIT) {
+      addMessage(messages, text, "user"); logMessage(text, "user");
+      const msg = "Essa conversa já foi longa! Atualiza a página pra continuar, ou fala com a gente pelo WhatsApp.";
+      addMessage(messages, msg, "bot"); logMessage(msg, "bot");
       return;
     }
 
     sending = true;
-    input.value = "";
-    form.querySelector("button[type=submit]").disabled = true;
-    addMessage(messages, text, "user");
+    submitButton.disabled = true;
+    addMessage(messages, text, "user"); logMessage(text, "user");
+    sessionCount++;
+    writeDailyUsage({ ...daily, count: daily.count + 1 });
     const typing = addTypingIndicator(messages);
 
     try {
@@ -261,19 +352,32 @@ async function main() {
       }
 
       typing.remove();
-      addMessage(messages, result.response.text(), "bot");
+      const replyText = result.response.text();
+      addMessage(messages, replyText, "bot");
+      let historySnapshot = saved?.history || null;
+      try { historySnapshot = await chat.getHistory(); } catch { /* SDK sem getHistory disponível; mantém snapshot anterior */ }
+      uiLog.push({ text: replyText, who: "bot" });
+      persist(historySnapshot);
     } catch (error) {
       console.error("Chatbot BritoTec: erro ao chamar o Gemini.", error);
       typing.remove();
       const msg = error?.message === "timeout"
         ? "Estou demorando mais que o normal pra responder. Tente novamente em instantes ou fale com a gente pelo WhatsApp."
         : "Não consegui responder agora. Tente novamente em instantes ou fale com a gente pelo WhatsApp.";
-      addMessage(messages, msg, "bot");
+      addMessage(messages, msg, "bot"); logMessage(msg, "bot");
     } finally {
       sending = false;
-      form.querySelector("button[type=submit]").disabled = false;
+      submitButton.disabled = false;
       input.focus();
     }
+  }
+
+  form.addEventListener("submit", event => {
+    event.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = "";
+    sendUserMessage(text);
   });
 }
 
