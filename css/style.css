@@ -63,7 +63,7 @@
 /* ===== Botão flutuante do WhatsApp ===== */
 .whatsapp-float{position:fixed;left:22px;bottom:22px;z-index:9998;width:56px;height:56px;border-radius:50%;background:#25D366;color:#fff;display:grid;place-items:center;box-shadow:0 10px 28px rgba(37,211,102,.4);transition:.2s transform;text-decoration:none}
 .whatsapp-float:hover{transform:scale(1.06)}
-.whatsapp-float svg{width:28px;height:28px;fill:#fff}
+.whatsapp-float svg{width:26px;height:26px;fill:#fff}
 @media (max-width:480px){.whatsapp-float{left:16px;bottom:16px;width:50px;height:50px}}
 
 /* ===== Rodapé completo ===== */
